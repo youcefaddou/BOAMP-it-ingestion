@@ -9,46 +9,67 @@
 | `boamp-raw-dlq` | 1 | `event_id` | Annonces rejetées + métadonnées d'erreur (étape 5) |
 
 Nommage du cours : topic principal `<source>-raw`, DLQ `<source>-raw-dlq`.
+Création : `kafka/scripts/create_topics.sh` (relançable grâce à `--if-not-exists`).
 
 ## Nombre de partitions
 
-- **3 partitions** : permet jusqu'à 3 consumers en parallèle dans un même groupe.
-  Avec ~600 annonces par mois, 1 consumer suffit aujourd'hui, 3 laissent de la marge
-  (plus de consumers que de partitions = consumers inactifs, cf. cours).
-- **DLQ à 1 partition** : très faible volume attendu, et on garde l'ordre des rejets.
-- Facteur de réplication 1 : un seul broker en local (en production : 3 brokers, réplication 3).
+- **3 partitions** : jusqu'à 3 consumers en parallèle dans un même groupe. ~600 annonces/mois :
+  1 consumer suffit, 3 laissent de la marge (plus de consumers que de partitions = consumers inactifs).
+- **DLQ à 1 partition** : très faible volume, ordre total des rejets conservé.
+- Réplication 1 : un seul broker en local (en production : 3 brokers minimum, réplication 3).
 
 ## Clé de message
 
-`partition = hash(event_id) % 3`. `event_id` est construit à partir de `idweb`,
-l'identifiant unique BOAMP :
-- une même annonce va **toujours dans la même partition**, donc ses versions restent ordonnées ;
-- les clés sont toutes différentes, donc **pas de partition chaude**.
+`partition = hash(event_id) % 3`, avec `event_id` construit depuis `idweb` (identifiant unique BOAMP) :
+- une même annonce va toujours dans la même partition, donc ses versions restent ordonnées ;
+- toutes les clés sont différentes, donc **pas de partition chaude**
+  (contre-exemple : une clé `nomacheteur` surchargerait la partition des gros acheteurs).
 
-Répartition mesurée (85 088 messages) : 28 300 / 28 470 / 28 318.
+Répartition mesurée sur 85 088 messages : **28 300 / 28 470 / 28 318** (écart < 1 %).
 
-## Producer
+## Producer (`connectors/base.py`)
 
-`acks=all` (durabilité maximale), `linger.ms=5` et `batch.size=16384` (envoi groupé).
-Un callback `on_delivery` compte les échecs de livraison : s'il y en a, l'état
-incrémental n'est pas sauvé et la relance republie le lot.
+| Paramètre | Valeur | Raison |
+|---|---|---|
+| `acks` | `all` | Durabilité maximale |
+| `linger.ms` / `batch.size` | `5` / `16384` | Envoi groupé (valeurs du cours) |
+| Sérialisation | JSON UTF-8 | Lisible, simple à déboguer |
+| `on_delivery` | callback | Compte les échecs ; si échec, l'état incrémental n'est pas sauvé et la relance republie |
 
-## Consumer et stratégie de reprise
+## Consumer (`consumers/boamp_consumer.py`)
 
-- Groupe `boamp-stockage`, `auto.offset.reset=earliest`.
-- **Commit manuel après écriture** (`enable.auto.commit=False`) : **at-least-once**.
-  Si le consumer plante après avoir écrit mais avant de committer, il relira ces messages
-  au redémarrage : aucune perte, mais des doublons possibles.
-- Le consumer s'arrête après 10 s sans message (lot piloté par Airflow).
+- Groupe `boamp-stockage`, `auto.offset.reset=earliest`, sortie `data/output/annonces.jsonl`.
+- `enable.auto.commit=False` : **écriture puis commit** = **at-least-once** (aucune perte, doublons possibles).
+- Commit tous les 1000 messages (la sémantique reste : commit après écriture).
+- Arrêt après 10 s sans message : le consumer est un lot lancé par Airflow (écart assumé au `while True` du cours).
 
-## Risques de doublons et parades
+## Vérifications
 
-| Origine du doublon | Parade |
+| Vérification | Résultat |
 |---|---|
-| Relance de l'API sur le mois en cours (jamais marqué terminé) | Dédoublonnage par `event_id` au consumer |
-| Crash du consumer entre l'écriture et le commit (at-least-once) | Idem : `event_id` déjà présent dans la sortie, pas réécrit |
-| Échec de livraison côté producer puis relance | État non sauvé, relance, puis dédoublonnage au consumer |
-| Relance des fichiers historiques | État `fichiers_publies.json` : fichiers déjà publiés sautés |
+| Publication (`kafka-get-offsets`) | 85 088 messages (84 809 fichiers + 279 API) |
+| Répartition | 28 300 / 28 470 / 28 318 |
+| Consommation (`kafka-consumer-groups --describe`) | LAG = 0 sur les 3 partitions |
+| 1er passage du consumer | 85 088 lus, 85 062 écrits, 26 doublons |
 
-Le traitement est donc **idempotent** : le relancer sur les mêmes données donne la même sortie.
-Démonstration : relancer l'API puis le consumer donne 279 lus, 0 écrits, 279 doublons ignorés.
+## Stratégie de reprise et risques de doublons
+
+| Origine du doublon | Constaté | Parade |
+|---|---|---|
+| Chevauchement des sources : l'historique (collecté le 03/11/2026) contient 26 annonces de novembre aussi renvoyées par l'API | Oui : 26 doublons | Dédoublonnage par `event_id` contre la cible |
+| Relance de l'API sur le mois en cours (jamais marqué terminé) | Oui : 279 lus, 0 écrits | Idem |
+| Crash du consumer entre écriture et commit (at-least-once) | Théorique | Idem : messages relus mais pas réécrits |
+| Échec de livraison côté producer | Théorique | État non sauvé, relance, puis dédoublonnage |
+| Relance des fichiers historiques | Oui : 0 message republié | État `data/state/fichiers_publies.json` |
+
+**Rejeu (rewind)** : `kafka-consumer-groups --reset-offsets --to-earliest --execute` puis relance du consumer :
+tout est relu, **0 écrit**, la sortie reste à 85 062 lignes. Le traitement est **idempotent**.
+
+## Écarts au cours (assumés)
+
+| Cours | Projet | Justification |
+|---|---|---|
+| Boucle `while True` | Arrêt après 10 s sans message | Consumer lancé en lot par Airflow |
+| Commit après chaque message | Commit tous les 1000, après écriture | Même sémantique at-least-once, plus rapide |
+| `event_id` du type `evt-20241123-00042` | `boamp-<idweb>` | Identifiant stable, indispensable au dédoublonnage |
+| 3+ brokers | 1 broker | Environnement local du TP |

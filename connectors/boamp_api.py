@@ -47,10 +47,12 @@ def construire_where(mois):
 
 
 def get_avec_backoff(params):
-    """GET avec backoff exponentiel + jitter (cours : rate limiting et backoff)."""
+    """GET avec backoff exponentiel + jitter (rate limiting et backoff)."""
+    cle = os.environ.get("BOAMP_API_KEY")
+    headers = {"Authorization": f"Apikey {cle}"} if cle else {}
     for tentative in range(NB_TENTATIVES):
         try:
-            reponse = requests.get(BASE_URL, params=params, timeout=30)
+            reponse = requests.get(BASE_URL, params=params, headers=headers, timeout=30)
         except (requests.Timeout, requests.ConnectionError) as erreur:
             attente = 2 ** tentative + random.uniform(0, 1)
             logging.warning("Erreur réseau (%s), nouvel essai dans %.1f s", erreur, attente)

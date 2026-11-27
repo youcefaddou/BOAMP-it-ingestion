@@ -92,3 +92,26 @@ def run(bootstrap=None, group_id="boamp_validation"):
                              on_delivery=on_delivery)
         if cle:
             deja_vus.add(cle)
+        producer.poll(0)   # déclenche les callbacks de livraison
+
+        if a_committer >= COMMIT_TOUS_LES:
+            committer()
+            a_committer = 0
+
+    if a_committer:
+        committer()
+    consumer.close()
+
+    controles = valides + rejetes
+    taux_validation = 100 * valides / controles if controles else 100
+    logging.info("%d lus | %d valides | %d rejetés | %d doublons ignorés | taux de validation %.2f %%",
+                 lus, valides, rejetes, doublons, taux_validation)
+    if 100 - taux_validation > SEUIL_REJETS:
+        logging.warning("ALERTE : %.2f %% de messages rejetés (seuil %d %%)", 100 - taux_validation, SEUIL_REJETS)
+    return {"lus": lus, "valides": valides, "rejetes": rejetes, "doublons": doublons}
+
+
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    load_dotenv()
+    run()

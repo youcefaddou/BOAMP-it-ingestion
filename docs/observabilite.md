@@ -135,7 +135,7 @@ avec `rejection_reason` et l'offset d'origine.
 | Identifiant de corrélation         | `event_id` en clé et en-tête Kafka, logs, DLQ, sortie ; `run_id` dans chaque log |
 | Tests                               | `tests/test_monitoring.py` (4 tests)                                                 |
 
-## Limites et écarts au cours (assumés)
+## Limites et choix assumés
 
 - **Pas de centralisation Loki + Grafana** : les logs restent dans Airflow (`/opt/airflow/logs`), déjà centralisés
   pour ce pipeline mono-machine, et interrogeables par `grep`. Évolution : Loki + Grafana pour un tableau de bord

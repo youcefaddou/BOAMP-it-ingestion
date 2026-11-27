@@ -8,7 +8,7 @@
 | `boamp-validated` | 3 | `event_id` | Annonces validées et normalisées (étape 5) |
 | `boamp-raw-dlq` | 1 | `event_id` | Annonces rejetées + métadonnées d'erreur (étape 5) |
 
-Nommage du cours : topic principal `<source>-raw`, DLQ `<source>-raw-dlq`.
+Convention de nommage : topic principal `<source>-raw`, DLQ `<source>-raw-dlq`.
 Création : `kafka/scripts/create_topics.sh` (relançable grâce à `--if-not-exists`).
 
 ## Nombre de partitions
@@ -32,7 +32,7 @@ Répartition mesurée sur 85 088 messages : **28 300 / 28 470 / 28 318** (écart
 | Paramètre | Valeur | Raison |
 |---|---|---|
 | `acks` | `all` | Durabilité maximale |
-| `linger.ms` / `batch.size` | `5` / `16384` | Envoi groupé (valeurs du cours) |
+| `linger.ms` / `batch.size` | `5` / `16384` | Envoi groupé (valeurs de référence) |
 | Sérialisation | JSON UTF-8 | Lisible, simple à déboguer |
 | `on_delivery` | callback | Compte les échecs ; si échec, l'état incrémental n'est pas sauvé et une exception est levée (la tâche Airflow est relancée et republie) |
 
@@ -41,7 +41,7 @@ Répartition mesurée sur 85 088 messages : **28 300 / 28 470 / 28 318** (écart
 - Groupe `boamp-stockage`, `auto.offset.reset=earliest`, sortie `data/output/annonces.jsonl`.
 - `enable.auto.commit=False` : **écriture puis commit** = **at-least-once** (aucune perte, doublons possibles).
 - Commit tous les 1000 messages (la sémantique reste : commit après écriture).
-- Arrêt après 10 s sans message : le consumer est un lot lancé par Airflow (écart assumé au `while True` du cours).
+- Arrêt après 10 s sans message : le consumer est un lot lancé par Airflow (au lieu d'une boucle infinie `while True`).
 
 ## Vérifications
 
@@ -65,11 +65,11 @@ Répartition mesurée sur 85 088 messages : **28 300 / 28 470 / 28 318** (écart
 **Rejeu (rewind)** : `kafka-consumer-groups --reset-offsets --to-earliest --execute` puis relance du consumer :
 tout est relu, **0 écrit**, la sortie reste à 85 062 lignes. Le traitement est **idempotent**.
 
-## Écarts au cours (assumés)
+## Choix assumés
 
-| Cours | Projet | Justification |
+| Pratique courante | Projet | Justification |
 |---|---|---|
 | Boucle `while True` | Arrêt après 10 s sans message | Consumer lancé en lot par Airflow |
 | Commit après chaque message | Commit tous les 1000, après écriture | Même sémantique at-least-once, plus rapide |
 | `event_id` du type `evt-20241123-00042` | `boamp-<idweb>` | Identifiant stable, indispensable au dédoublonnage |
-| 3+ brokers | 1 broker | Environnement local du TP |
+| 3+ brokers | 1 broker | Environnement local de développement |

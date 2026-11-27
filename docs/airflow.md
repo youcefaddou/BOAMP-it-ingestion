@@ -106,7 +106,7 @@ Pendant l'arrêt, Kafka UI ne répond plus et le run est en cours (`publier_api`
   et suppression du fichier PID résiduel du webserver au démarrage (sinon le webserver refuse de démarrer
   après un arrêt : `No response from gunicorn master within 120 seconds`).
 
-## Écarts au cours (assumés)
+## Choix assumés
 
 - `retry_delay` de 1 min au lieu de 5 min, pour une démonstration rapide (5 min en production).
 - `SequentialExecutor` (mode standalone, SQLite) : les deux tâches de publication s'exécutent l'une après l'autre.

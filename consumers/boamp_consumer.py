@@ -1,16 +1,20 @@
-"""Consumer boamp-validated -> data/output/annonces.jsonl (at-least-once + dédoublonnage)"""
+"""Consumer boamp-validated -> data/output/annonces.jsonl (at-least-once + dédoublonnage)."""
 import json
 import logging
 import os
+import time
 from pathlib import Path
 
 from confluent_kafka import Consumer
 from dotenv import load_dotenv
 
+from monitoring.observabilite import log_json
+
 OUTPUT = Path(__file__).resolve().parents[1] / "data" / "output" / "annonces.jsonl"
 TOPIC = "boamp-validated"
 SILENCE_MAX = 10      # secondes sans nouveau message -> fin du lot
 COMMIT_TOUS_LES = 1000
+logger = logging.getLogger(__name__)
 
 
 def ids_deja_ecrits(chemin):
@@ -29,6 +33,7 @@ def run(bootstrap=None, group_id="boamp-stockage"):
         "enable.auto.commit": False,       # commit manuel APRÈS écriture = at-least-once
     })
     consumer.subscribe([TOPIC])
+    debut = time.monotonic()
 
     deja_vus = ids_deja_ecrits(OUTPUT)
     lus = ecrits = doublons = a_committer = silence = 0
@@ -41,7 +46,7 @@ def run(bootstrap=None, group_id="boamp-stockage"):
                 silence += 1
                 continue
             if msg.error():
-                logging.error("Erreur Kafka : %s", msg.error())
+                log_json(logger, "erreur_kafka", logging.ERROR, erreur=str(msg.error()))
                 continue
             silence = 0
             lus += 1
@@ -66,7 +71,8 @@ def run(bootstrap=None, group_id="boamp-stockage"):
             consumer.commit(asynchronous=False)
     consumer.close()
 
-    logging.info("%d lus, %d écrits, %d doublons ignorés", lus, ecrits, doublons)
+    log_json(logger, "stockage_termine", topic=TOPIC, lus=lus, ecrits=ecrits, doublons=doublons,
+             duration_ms=int((time.monotonic() - debut) * 1000))
     return {"lus": lus, "ecrits": ecrits, "doublons": doublons}
 
 

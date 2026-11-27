@@ -9,6 +9,7 @@ import requests
 from dotenv import load_dotenv
 
 from connectors.base import Connector
+from monitoring.observabilite import log_json
 
 BASE_URL = "https://boamp-datadila.opendatasoft.com/api/explore/v2.1/catalog/datasets/boamp/records"
 DESCRIPTEURS_IT = [
@@ -21,6 +22,7 @@ DESCRIPTEURS_IT = [
 PAGE_SIZE = 100                                  # maximum accepté par l'API
 STATUTS_A_REESSAYER = {429, 500, 502, 503, 504}  # erreurs transitoires
 NB_TENTATIVES = 5
+logger = logging.getLogger(__name__)
 
 
 def mois_suivant(mois):
@@ -47,7 +49,7 @@ def construire_where(mois):
 
 
 def get_avec_backoff(params):
-    """GET avec backoff exponentiel + jitter (rate limiting et backoff)."""
+    """GET avec backoff exponentiel + jitter (gestion du rate limiting)."""
     cle = os.environ.get("BOAMP_API_KEY")
     headers = {"Authorization": f"Apikey {cle}"} if cle else {}
     for tentative in range(NB_TENTATIVES):
@@ -55,12 +57,12 @@ def get_avec_backoff(params):
             reponse = requests.get(BASE_URL, params=params, headers=headers, timeout=30)
         except (requests.Timeout, requests.ConnectionError) as erreur:
             attente = 2 ** tentative + random.uniform(0, 1)
-            logging.warning("Erreur réseau (%s), nouvel essai dans %.1f s", erreur, attente)
+            log_json(logger, "nouvel_essai_http", logging.WARNING, erreur=str(erreur), attente_s=round(attente, 1))
             time.sleep(attente)
             continue
         if reponse.status_code in STATUTS_A_REESSAYER:
             attente = int(reponse.headers.get("Retry-After", 2 ** tentative)) + random.uniform(0, 1)
-            logging.warning("HTTP %d, nouvel essai dans %.1f s", reponse.status_code, attente)
+            log_json(logger, "nouvel_essai_http", logging.WARNING, statut=reponse.status_code, attente_s=round(attente, 1))
             time.sleep(attente)
             continue
         reponse.raise_for_status()   # 4xx : erreur définitive, pas de retry
@@ -93,7 +95,7 @@ class BoampApiConnector(Connector):
                 offset += PAGE_SIZE
                 if offset >= page["total_count"]:
                     break
-            logging.info("%s : %d annonces", mois, page["total_count"])
+            log_json(logger, "mois_extrait", mois=mois, records_count=page["total_count"])
             if mois != mois_en_cours:   # le mois en cours n'est jamais terminé
                 self.termines.add(mois)
 

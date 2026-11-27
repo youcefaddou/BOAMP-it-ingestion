@@ -87,9 +87,10 @@ class Connector:
             nb += 1
         self.producer.flush()
 
-        if self.nb_erreurs == 0:
-            sauver_etat(self.nom_etat, self.termines)
-        else:
-            logging.error("%d erreurs de livraison : état non sauvé, relancer", self.nb_erreurs)
+        if self.nb_erreurs:
+            # Exception = la tâche Airflow échoue et sera relancée (retries).
+            # L'état n'est pas sauvé : le retry republiera, le consumer dédoublonnera.
+            raise RuntimeError(f"{self.nb_erreurs} erreurs de livraison : état non sauvé")
+        sauver_etat(self.nom_etat, self.termines)
         logging.info("%s : %d messages publiés dans %s", self.source, nb, self.topic)
         return nb

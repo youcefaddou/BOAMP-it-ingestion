@@ -34,7 +34,7 @@ Répartition mesurée sur 85 088 messages : **28 300 / 28 470 / 28 318** (écart
 | `acks` | `all` | Durabilité maximale |
 | `linger.ms` / `batch.size` | `5` / `16384` | Envoi groupé (valeurs du cours) |
 | Sérialisation | JSON UTF-8 | Lisible, simple à déboguer |
-| `on_delivery` | callback | Compte les échecs ; si échec, l'état incrémental n'est pas sauvé et la relance republie |
+| `on_delivery` | callback | Compte les échecs ; si échec, l'état incrémental n'est pas sauvé et une exception est levée (la tâche Airflow est relancée et republie) |
 
 ## Consumer (`consumers/boamp_consumer.py`)
 

@@ -179,7 +179,7 @@ Les 21 messages déjà en DLQ sont conservés (un topic Kafka est un journal, on
 | Invalides en DLQ avec métadonnées d'erreur | `message_dlq()`, 8 champs |
 | Tests | `tests/test_validation.py` (6 tests) |
 
-## Écarts au cours (assumés)
+## Choix assumés
 
 - **Normalisation dans le consumer de validation, pas dans `to_event()`** : `boamp-raw` garde le message tel
   que la source l'a envoyé. Un bug de normalisation se corrige puis se rejoue depuis `boamp-raw`.

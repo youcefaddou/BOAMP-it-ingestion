@@ -33,7 +33,7 @@ Il n'est **pas** gardé dans les messages (minimisation dès le connecteur).
 
 ## Choix du pattern d'ingestion
 
-Arbre de décision du cours : la latence tolérée est de plusieurs heures (une analyse des
+Arbre de décision des patterns d'ingestion : la latence tolérée est de plusieurs heures (une analyse des
 marchés n'a pas besoin de la seconde), donc **Pull (batch)**.
 Airflow lance la collecte 2 fois par jour, au rythme de publication du BOAMP.
 
@@ -44,7 +44,7 @@ On place quand même **Kafka** entre la collecte et le traitement :
 - **deux sources dans un même topic** `boamp-raw`, avec la même enveloppe d'événement.
 
 Limite assumée : pour ce volume, Kafka n'est pas indispensable du point de vue de la latence
-(règle pratique du cours : commencer par le plus simple). Il est choisi pour le rejeu et la DLQ.
+(règle pratique : commencer par le plus simple). Il est choisi pour le rejeu et la DLQ.
 
 ## Schéma d'architecture
 

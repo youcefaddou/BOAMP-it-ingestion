@@ -7,8 +7,10 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 from connectors.base import Connector
+from monitoring.observabilite import log_json
 
 INPUT_DIR = Path(__file__).resolve().parents[1] / "data" / "input"
+logger = logging.getLogger(__name__)
 
 
 class FileConnector(Connector):
@@ -29,7 +31,7 @@ class FileConnector(Connector):
                     try:
                         yield json.loads(ligne)
                     except json.JSONDecodeError:
-                        logging.warning("Ligne illisible : %s ligne %d", chemin.name, numero)
+                        log_json(logger, "ligne_illisible", logging.WARNING, fichier=chemin.name, ligne=numero)
             self.termines.add(chemin.name)
 
 

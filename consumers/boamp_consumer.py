@@ -1,4 +1,4 @@
-"""Consumer boamp-raw -> data/output/annonces.jsonl (at-least-once + dédoublonnage)."""
+"""Consumer boamp-validated -> data/output/annonces.jsonl (at-least-once + dédoublonnage)"""
 import json
 import logging
 import os
@@ -8,7 +8,7 @@ from confluent_kafka import Consumer
 from dotenv import load_dotenv
 
 OUTPUT = Path(__file__).resolve().parents[1] / "data" / "output" / "annonces.jsonl"
-TOPIC = "boamp-raw"
+TOPIC = "boamp-validated"
 SILENCE_MAX = 10      # secondes sans nouveau message -> fin du lot
 COMMIT_TOUS_LES = 1000
 

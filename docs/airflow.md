@@ -12,7 +12,7 @@ publier_fichiers ─┘
 |---|---|---|
 | `publier_api` | Connecteur API BOAMP → `boamp-raw` | nombre de messages publiés |
 | `publier_fichiers` | Connecteur fichiers historiques → `boamp-raw` | nombre de messages publiés |
-| `consommer` | `boamp-raw` → `data/output/annonces.jsonl`, dédoublonnage par `event_id` | `{lus, ecrits, doublons}` |
+| `consommer` | `boamp-raw` → `data/output/annonces.jsonl`, dédoublonnage par `event_id` (depuis l'étape 5 : lit `boamp-validated`, voir [qualite.md](qualite.md)) | `{lus, ecrits, doublons}` |
 | `controler_volumes` | Vérifie `lus >= publiés` et l'absence de doublons dans la sortie | — (échoue sinon) |
 
 Le DAG ne contient pas de logique métier : il orchestre les connecteurs (étape 2) et le consumer (étape 3).

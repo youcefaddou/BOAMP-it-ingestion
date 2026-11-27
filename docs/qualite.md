@@ -91,7 +91,7 @@ Pour chaque message de `boamp-raw` (consumer group `boamp_validation`) :
    - valide → normalisé (`normaliser()`) puis publié dans `boamp-validated`, avec la même clé.
 3. **Commit** des offsets lus tous les 1000 messages, **après** confirmation des publications par Kafka (`flush()`).
    En cas d'erreur de livraison : pas de commit, exception, retry Airflow → aucun message perdu (at-least-once).
-4. **Fin de lot** : taux de validation journalisé en INFO ; `WARNING ALERTE` si plus de 5 % de rejets.
+4. **Fin de lot** : taux de validation journalisé en INFO. L'alerte au-delà de 5 % de rejets est gérée avec les autres seuils (voir [observabilite.md](observabilite.md)).
 
 Le dédoublonnage long terme reste côté stockage (`boamp_consumer`, vérification contre `annonces.jsonl`).
 
@@ -187,5 +187,5 @@ Les 21 messages déjà en DLQ sont conservés (un topic Kafka est un journal, on
   (même `ValidationError`) : 10 s au lieu de 109 s pour 85 000 annonces.
 - **`pattern` au lieu de `"format": "date-time"`** : sans librairie supplémentaire, `format` n'est pas vérifié.
 - **Première erreur seulement** dans `rejection_reason` (comportement de `validate`), suffisant pour l'analyse.
-- **Alerte à 5 %** : simple `WARNING` dans les logs pour l'instant ; alerte formelle à l'étape 6 (monitoring).
+- **Alerte à 5 %** : d'abord un simple `WARNING` dans le consumer, déplacée à l'étape 6 dans les seuils d'alerte (`verifier_seuils`, voir [observabilite.md](observabilite.md)).
 - Nom du consumer group `boamp_validation` (underscore) : conservé pour ne pas relancer un rejeu complet.

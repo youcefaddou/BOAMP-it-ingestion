@@ -1,4 +1,4 @@
-"""DAG BOAMP : publier (API + fichiers) -> consommer -> contrôler les volumes."""
+"""DAG BOAMP : publier (API + fichiers) -> valider -> consommer -> contrôler les volumes."""
 from datetime import datetime, timedelta
 
 from airflow import DAG
@@ -44,34 +44,44 @@ with DAG(
         from connectors.file_connector import FileConnector
         return FileConnector().run()
 
-    # 2. Consommation : boamp-raw -> data/output/annonces.jsonl (dédoublonné) 
+    # 2. Validation : boamp-raw -> boamp-validated (valides) / boamp-raw-dlq (rejets)
+    @task
+    def valider():
+        from consumers import validation_consumer
+        return validation_consumer.run()
+
+    # 3. Consommation : boamp-validated -> data/output/annonces.jsonl (dédoublonné)
     @task
     def consommer():
         from consumers import boamp_consumer
         return boamp_consumer.run()
 
-    # 3. Contrôle : comparer au volume publié + vérifier l'absence de doublons 
+    # 4. Contrôle : comparer les volumes d'une étape à l'autre + vérifier l'absence de doublons
     @task
-    def controler_volumes(nb_api, nb_fichiers, bilan):
+    def controler_volumes(nb_api, nb_fichiers, validation, bilan):
         import json
         import logging
         from consumers.boamp_consumer import OUTPUT
 
         publies = nb_api + nb_fichiers
-        if bilan["lus"] < publies:
-            raise ValueError(f"{publies} messages publiés mais seulement {bilan['lus']} lus")
+        if validation["lus"] < publies:
+            raise ValueError(f"{publies} messages publiés mais seulement {validation['lus']} validés")
+        if bilan["lus"] < validation["valides"]:
+            raise ValueError(f"{validation['valides']} messages valides mais seulement {bilan['lus']} lus")
 
         with open(OUTPUT, encoding="utf-8") as f:
             ids = [json.loads(ligne)["event_id"] for ligne in f]
         if len(ids) != len(set(ids)):
             raise ValueError(f"{len(ids) - len(set(ids))} doublons dans {OUTPUT.name}")
 
-        logging.info("Publiés %d | lus %d | écrits %d | doublons ignorés %d | total sortie %d",
-                     publies, bilan["lus"], bilan["ecrits"], bilan["doublons"], len(ids))
+        logging.info("Publiés %d | valides %d | rejetés %d | écrits %d | doublons ignorés %d | total sortie %d",
+                     publies, validation["valides"], validation["rejetes"], bilan["ecrits"],
+                     validation["doublons"] + bilan["doublons"], len(ids))
 
     # Dépendances
     api = publier_api()
     fichiers = publier_fichiers()
+    validation = valider()
     bilan = consommer()
-    [api, fichiers] >> bilan                 # consommer attend les DEUX sources
-    controler_volumes(api, fichiers, bilan)  # utiliser leurs résultats crée aussi le lien
+    [api, fichiers] >> validation >> bilan               # valider attend les DEUX sources
+    controler_volumes(api, fichiers, validation, bilan)  # utiliser leurs résultats crée aussi le lien
